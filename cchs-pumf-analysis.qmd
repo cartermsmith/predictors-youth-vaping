@@ -1,0 +1,373 @@
+---
+title: "CCHS PUMF Analysis"
+format:
+  html:
+    toc: true
+    code-fold: true
+jupyter: cchs-pumf-analysis
+---
+
+## Imports
+
+```{python}
+import duckdb
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import sklearn
+import statsmodels.formula.api as smf
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import roc_curve, roc_auc_score
+```
+
+```{python}
+#| echo: false
+#| output: false
+
+# Set constant plot font sizes
+plt.rcParams.update({
+    'axes.labelsize': 14,
+    'axes.titlesize': 14,
+    'xtick.labelsize': 12,
+    'ytick.labelsize': 12,
+    'legend.fontsize': 12
+})
+```
+
+## Wrangling with SQL
+
+Let us first query the CCHS data to extract the relevant properties for the analysis. We will use the `duckdb` library.
+
+```{python}
+# set an in-memory connection
+conn = duckdb.connect(database=":memory:") 
+
+# CREATE a table called cchs with all columns from the locally stored csv
+conn.sql("""
+CREATE TABLE cchs 
+AS SELECT * FROM read_csv_auto('data/pumf_cchs.csv')
+""") 
+
+# SELECT the relevant columns for analysis, then filter the data
+conn.sql("""
+COPY (
+    SELECT 
+        ECVG15, 
+        COLMODEY, 
+        DHH_SEX, 
+        GEN_01, 
+        GEN_05, 
+        GEN_10, 
+        GEN_20, 
+        LSM_01, 
+        CCC_135, 
+        CC1_140
+    FROM cchs
+    WHERE ECVG15 IN (1,2) 
+        AND COLMODEY IN (1,2)
+        AND GEN_01 IN (1,2,3,4,5)
+        AND GEN_05 IN (1,2,3,4,5)
+        AND GEN_10 IN (1,2,3,4,5)
+        AND GEN_20 IN (1,2,3,4)
+        AND LSM_01 IN (0,1,2,3,4,5,6,7,8,9,10)
+        AND CCC_135 IN (1,2)
+        AND CC1_140 IN (1,2)
+)
+TO 'data/cchs-queried.csv'
+(FORMAT CSV, HEADER)
+""")
+```
+
+## Wrangling with `pandas`
+
+We will now examine the data with Python.
+
+```{python}
+data = pd.read_csv("data/cchs-queried.csv")
+```
+
+Let us rename the columns to be more clear and intuitive:
+
+```{python}
+data.rename(columns={
+    'ECVG15': 'vaping',
+    'COLMODEY' : 'clct_mthd',
+    'DHH_SEX' : 'sex',
+    'GEN_01' : 'perc_gen_health',
+    'GEN_05' : 'perc_ment_health',
+    'GEN_10' : 'perc_stress',
+    'GEN_20' : 'sens_blng',
+    'LSM_01' : 'life_satis',
+    'CCC_135' : 'mood_disdr',
+    'CC1_140' : 'anx_disdr'},inplace=True)
+```
+
+We need to change the values in our DV from 1s and 2s to 0s and 1s.
+
+```{python}
+data['vaping'] = data['vaping'].replace({
+    2: 0,
+    1: 1
+})
+```
+
+Let us update some values to make them clearer as well:
+
+*Collection method*
+
+```{python}
+data['clct_mthd'] = data['clct_mthd'].replace({
+    1: 'questionnaire',
+    2: 'telephone'
+})
+```
+
+*Sex*
+
+```{python}
+data['sex'] = data['sex'].replace({
+    1: 'male',
+    2: 'female'
+})
+```
+
+*Mood disorder*
+
+*where 1 == a mood disorder, and 0 == no mood disorder*
+
+```{python}
+data['mood_disdr'] = data['mood_disdr'].replace({
+    1: 1,
+    2: 0
+})
+```
+
+*Anxiety disorder*
+
+*where 1 == an anxiety disorder, and 0 == no anxiety disorder*
+
+```{python}
+data['anx_disdr'] = data['anx_disdr'].replace({
+    1: 1,
+    2: 0
+})
+```
+
+Let us take a look at the cleaned data frame:
+
+```{python}
+display(data)
+```
+
+::: {.callout-note collapse="true"}
+## What do these values represent?
+`perc_gen_health`, `perc_ment_health`, `perc_stress`, `sens_blng`, and `life_satis` are coded such that lower values = poorer perceived health/sense of belonging/life satisfaction.
+:::
+
+This project focuses on the factors that influence self-reports of recent e-cigarette use in a youth sample. We will explore whether certain variables change the predicted probability of e-cigarette use in the past month.
+
+Since our dependent variable is binary, we will implement a logistic regression.
+
+## Logistic regression with `statsmodels`
+
+### Fit the model
+
+```{python}
+#| warning: false
+#| message: false
+mod = smf.logit('vaping ~ perc_gen_health + perc_ment_health + perc_stress + sens_blng + life_satis + mood_disdr + anx_disdr', data=data).fit()
+```
+
+We can then generate a summary of the model to see the influence of our predictors
+
+```{python}
+print(mod.summary())
+```
+
+When looking at the summary, we see that sense of community belonging meaningfully changes the likelihood of recent youth e-cigarette use. Youth life satisfaction also changes vaping status, although this effect was marignally significant.
+
+Let us explore the marginal effects from the model to understand how much a single unit increase in a given predictor alters the likelihood of e-cigarette use.
+
+### Marginal effects
+
+```{python}
+margeff = mod.get_margeff()
+print(margeff.summary())
+```
+
+In this table, we observe that, for every one unit increase in a youth's sense of belonging, their likelihood to report e-cigarette use in the past month lowers by approximately 10.3%. Further, we see a marginal effect of life satisfaction: this tells us that recent e-cigarette use is lowered by about 3.1% for every single-unit increase.
+
+We will visualize these marginal effects next.
+
+### Convert to data frame for plotting
+
+```{python}
+margeff_df = pd.DataFrame({
+    'variable': mod.model.exog_names[1:],
+    'dydx': margeff.margeff,
+    'std_err': margeff.margeff_se,
+    'p_value': margeff.pvalues,
+    'ci_low': margeff.conf_int()[:, 0],
+    'ci_high': margeff.conf_int()[:, 1]
+})
+```
+
+Rename variables for plot readability
+
+```{python}
+margeff_df['variable'] = margeff_df['variable'].replace({
+    'perc_gen_health': 'Perceived General Health',
+    'perc_ment_health': 'Perceived Mental Health',
+    'perc_stress': 'Perceived Life Stress',
+    'sens_blng': 'Sense of Community Belonging',
+    'life_satis': 'General Life Satisfaction',
+    'mood_disdr': 'Mood Disorder',
+    'anx_disdr': 'Anxiety Disorder',
+})
+```
+
+### Visualize the marginal effects
+
+```{python}
+margeff_df = margeff_df.sort_values('dydx')
+
+fig, ax = plt.subplots(figsize=(9,5))
+
+ax.errorbar(
+    margeff_df['dydx'], margeff_df['variable'],
+    xerr=[margeff_df['dydx'] - margeff_df['ci_low'],
+          margeff_df['ci_high'] - margeff_df['dydx']],
+    fmt='o', capsize=3
+)
+ax.axvline(0, linestyle='--', color='gray', linewidth=1)
+ax.set_xlabel('Average Marginal Effect (percentage points)')
+ax.set_title('Predictors of Youth Vaping Status')
+plt.tight_layout()
+plt.savefig("plot.jpg")
+plt.show()
+```
+
+*Note:* Error bars represent 95% confidence intervals
+
+Beyond life satisfaction and community belonging, all other predictors did not meaningfully change the probability of youth vaping. Thus, community belonging and overall satisfaction may be two variables that e-cigarette interventions could target to reduce the likelihood of youth uptake.
+
+However, it is important to consider some reasons why these other predictors do not meaningfullt change the probability of vaping status. Beyond merely a weak signal, one possibility could be that the logistic model has difficulty estimating the effect of certain predictors since they are closely related. This concern re: collinearity of the predictors could be checked by examining the variance inflation factor of each predictor.
+
+Typically, a VIF of 1 means there is no multi-collinearity. 5-10 is cause for some concern, and > 10 means the estimates from those predictors are unstable.
+
+### Check VIF:
+
+```{python}
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+x = data[[
+    'perc_gen_health',
+    'perc_ment_health', 
+    'perc_stress',
+    'sens_blng',
+    'life_satis',
+    'mood_disdr', 
+    'anx_disdr'
+]]
+
+corr_vars = ['life_satis', 'sens_blng', 'perc_gen_health', 'perc_ment_health', 'perc_stress', 'mood_disdr', 'anx_disdr']
+
+vif_data = pd.DataFrame()
+vif_data['feature'] = corr_vars
+vif_data['VIF'] = [variance_inflation_factor(x[corr_vars].values, i) for i in range(len(corr_vars))]
+print(vif_data.sort_values('VIF', ascending=False))
+```
+
+We can see that many of these variables have a very high VIF, making the estimation of their effect on youth vaping probability hard to rely on.
+
+To account for this, we will proceed with a method that does not hold the same assumptions that a logistic regression does. We will use a random forest ML classifier.
+
+## Random forest machine learning classifier with `sklearn`
+
+First, we will state what our predictor and outcome variables are, then use the train, test, split method.
+
+```{python}
+# We will use x from above for the predictors
+
+y = data['vaping']
+
+x_train, x_test, y_train, y_test = train_test_split(
+    x, y, test_size=.25, random_state=29, stratify=y)
+```
+
+Let's next look into class balance -- what proportion of the sample reports vaping in the past month?
+
+```{python}
+# First, let us get the counts for the number of 1s and 0s
+
+col_count = y.value_counts()
+
+# Then we can get the proportions
+col_prop = y.value_counts(normalize=True)
+
+# And we can combine these into a single dataframe
+
+col_concat = pd.concat([col_count,col_prop], axis=1, keys=['count','proportion'])
+
+print(col_concat)
+```
+
+We find that the classes are quite balanced. This is useful because, if we wanted to use this model to classify members of the youth sample as being users/non-users of e-cigarettes, we would be confident that the model could provide a reliable estimate. When there are lopsided classes, this can lead to an unreliable accuracy value.
+
+Next, we will move on to training the model.
+
+### Train the model:
+
+```{python}
+classifier = RandomForestClassifier(n_estimators=100, random_state=29)
+
+classifier.fit(x_train, y_train)
+```
+
+### Model diagnostics
+
+Now that we have fit the model, we should explore how well it performs.
+
+We will plot an AUC-ROC curve to examine how well the model performs, versus chance.
+
+```{python}
+y_prob = classifier.predict_proba(x_test)[:,1]
+
+fpr, tpr, thresholds = roc_curve(y_test,y_prob)
+
+roc_auc = roc_auc_score(y_test,y_prob)
+
+plt.figure()
+plt.plot(fpr, tpr, label=f"ROC Curve (AUC = {roc_auc:.2f})")
+plt.plot([0,1], [0,1], linestyle="--")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC Curve")
+plt.legend()
+plt.show()
+```
+
+We see that the model is actually doing a very poor job of classifying youth as users or non-users of e-cigarettes. When we examine how much a given predictor contributes to the model's classifications, we should interpret these importances with caution because they are likely unstable. 
+
+Now we will get to see how much each of our predictors influenced the classification process. That is, how much uncertainty did a given predictor (henceforth 'feature') remove when the model was making classifications? This gives us an estimate of the importance of a feature in the model, but it does not tell us how much each feature influences real-world outcomes like e-cigarette use, for example.
+
+### Identify feature importances:
+
+```{python}
+feat_import = pd.Series(classifier.feature_importances_, index=x.columns)
+
+feat_import_sorted = feat_import.sort_values(ascending=False)
+
+print(feat_import_sorted)
+```
+
+Crucially, these feature importances are likely not reliable estimates of the usefulness of each feature, because the model lacks predictive power in the first place. Instead, the logistic and random forest models suggest that the predictors do not meaningfully change the predicted probability that a young person has used an e-cigarette lately.
+
+The non-significant results in the logistic regression may not be driven wholly by high VIF values, but rather a lack of signal in the data. 
+
+Importantly, the effect of community belonging should not be interpreted as unimportant given weak predictive power of the other predictors. Instead, this variable seems to exert a meaningful influence on reducing youth vaping and is one of the stronger signals in a relatively noisy sample.
+
+For a write-up of these data, with conclusions and next steps, see `brief.pdf`

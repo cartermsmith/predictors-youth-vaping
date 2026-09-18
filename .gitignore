@@ -1,0 +1,15 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+brief.tex
+*.quarto_ipynb
+/.quarto/
+_freeze/
+
+data/
+cchs-queried.csv
+
+.DS_Store
+.ipynb_checkpoints/
