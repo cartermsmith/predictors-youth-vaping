@@ -26,13 +26,13 @@ Research has explored the factors associated with high vaping prevalence in Cana
 
 ## Data Description
 
-This project uses data from the [Canadian Community Health Survey: Public Use Microdata File](https://doi.org/10.25318/82m0013x-eng). The data are from the 2022 report, and are based on reports from over 130,000 people across Canada aged 12+. This project includes data from 447 youth respondents. 
+This project uses data from the [Canadian Community Health Survey: Public Use Microdata File](https://doi.org/10.25318/82m0013x-eng). The data are from the 2022 report, and are based on reports from over 130,000 people across Canada age 12+. This project included data from 447 youth respondents. 
 
 ## Methodology
 
 Only data from youth respondents (aged 12–17) were analyzed. The binary outcome variable was whether a youth respondent had used an e-cigarette at least once over the past month. The two classes were reasonably balanced (55% non-users, 45% users). Several continuous and binary variables were investigated to explore their influence on the probability of the outcome. For a concise presentation of these predictor variables, refer to the left side of *Figure 1*.
 
-The youth sample was queried from the full microdata file using SQL, via the `duckdb` library. Subsequent cleaning, modelling, and visualization was done in Python. The complete analysis code can be viewed as an HTML file [here](github.com).
+The youth sample was queried from the full microdata file using SQL, via the `duckdb` library. Subsequent cleaning, modelling, and visualization was done in Python. The complete analysis code can be viewed as an HTML file [here](https://github.com/cartermsmith/predictors-youth-vaping).
 
 ## Findings
 
@@ -48,10 +48,10 @@ The likelihood for youth to use e-cigarettes within the past month is reduced by
 
 ## Limitations
 
-Only two predictors meaningfully altered the likelihood of e-cigarette use. One explanation for this was that the predictors were highly correlated, violating a key assumption of logistic regression. After examining the variance inflation factor of each predictor, many of the variables were closely correlated with each other. A random forest classifier, which does not make this assumption, allowed me to examine predictor importance.
+Only two predictors meaningfully altered the likelihood of e-cigarette use. One explanation was that the predictors were highly correlated, violating a key assumption of logistic regression. After examining the variance inflation factor of each predictor, many of the variables were closely correlated with each other. A random forest classifier, which does not make this assumption, allowed me to examine predictor importance.
 
-However, upon checking the model's diagnostics, I found that this model did not learn much from the data. The model was only doing slightly better than random guessing when making predictions (AUC = 0.52). This means that the non-significant predictors likely lack predictive power on the outcome. The model's predictor rankings should be interpreted cautiously.
+However, upon checking the diagnostics of the model, I found that this model did not learn much from the data. The model was only doing slightly better than random guessing when making predictions (AUC = 0.52). This means that any conclusions drawn from this model's predictor rankings should be interpreted cautiously.
 
-I concluded that the null effects in the logistic model were driven by few signals in a noisy dataset, rather than violation of a statistical assumption.
+Therefore, I concluded that the lacking effects in the logistic model were driven by few signals in a noisy dataset, rather than a statistical assumption being violated. 
 
-The significant predictors in the logistic model remain as strong signals that may guide programs aiming to reduce youth vaping by targeting certain measures of well-being like community belonging or life satisfaction.
+The significant predictors in the logistic model remain as strong signals that may guide programs that aim to reduce youth vaping by targeting certain measures of well-being like community belonging or life satisfaction.
