@@ -63,4 +63,12 @@ quarto render brief.qmd
 
 - For a description of what an attempted robustness check via a machine learning algorithm revealed about the data, see the *Limitations* section of `brief.qmd` / `brief.pdf`.
 
+## Acknowledgements
+
+- The PrettyPDFs Quarto extension from Nicola Rennie was used when creating the brief. Check it out using the citation below!
+
+*Rennie, Nicola. 2023. “Making Pretty PDFs with Quarto.” February 17. https://nrennie.rbind.io/blog/pdf-quarto/making-pretty-pdf-quarto/.*
+
+- Data source note:
+
 *Source: Statistics Canada, 2022 Canadian Community Health Survey Public Use Microdata File, 2026-09-18. Reproduced and distributed on an "as is" basis with the permission of Statistics Canada.*
