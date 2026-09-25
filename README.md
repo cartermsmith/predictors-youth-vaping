@@ -63,4 +63,4 @@ quarto render brief.qmd
 
 - For a description of what an attempted robustness check via a machine learning algorithm revealed about the data, see the *Limitations* section of `brief.qmd` / `brief.pdf`.
 
-*Source: Statistics Canada, name of product, reference date. Reproduced and distributed on an "as is" basis with the permission of Statistics Canada.*
+*Source: Statistics Canada, 2022 Canadian Community Health Survey Public Use Microdata File, 2026-09-18. Reproduced and distributed on an "as is" basis with the permission of Statistics Canada.*
