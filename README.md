@@ -7,7 +7,7 @@ Author: Carter M. Smith
 
 Published: 2026-09-18; [`Version 1`](https://github.com/cartermsmith/predictors-youth-vaping/tree/v1.0).
 
-Revised: 2026-11-21 [`Version 1.1` / Revisions](https://github.com/cartermsmith/predictors-youth-vaping/pull/1)
+Revised: 2026-11-21 [`Version 1.1`](https://github.com/cartermsmith/predictors-youth-vaping/pull/1)
 
 An analysis of psychological predictors that are associated with the likelihood that a young person in Canada (aged 12-17), who has tried vaping, has used an e-cigarette over the past month. Data comes from the [2022 Canadian Community Health Survey Public Use Microdata File (CCHS-PUMF)](https://www150.statcan.gc.ca/n1/en/catalogue/82M0013X).
 
