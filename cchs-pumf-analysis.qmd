@@ -4,6 +4,7 @@ format:
   html:
     toc: true
     code-fold: true
+embed-resources: true
 jupyter: cchs-pumf-analysis
 ---
 
@@ -14,13 +15,14 @@ import duckdb
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import sklearn
+import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from statsmodels.stats.outliers_influence import variance_inflation_factor
-from sklearn.model_selection import train_test_split
+from sklearn.pipeline import make_pipeline
+from sklearn.model_selection import KFold, cross_val_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import roc_curve, roc_auc_score
+from sklearn.preprocessing import StandardScaler
 ```
 
 ```{python}
@@ -55,6 +57,7 @@ AS SELECT * FROM read_csv_auto('data/pumf_cchs.csv')
 conn.sql("""
 COPY (
     SELECT 
+        DHHGAGE,
         ECVG15, 
         COLMODEY, 
         DHH_SEX, 
@@ -66,7 +69,8 @@ COPY (
         CCC_135, 
         CC1_140
     FROM cchs
-    WHERE ECVG15 IN (1,2) 
+    WHERE ECVG15 IN (1,2)
+        AND DHHGAGE = 1
         AND COLMODEY IN (1,2)
         AND GEN_01 IN (1,2,3,4,5)
         AND GEN_05 IN (1,2,3,4,5)
@@ -164,14 +168,54 @@ display(data)
 
 ::: {.callout-note collapse="true"}
 ## What do these values represent?
-`perc_gen_health`, `perc_ment_health`, `perc_stress`, `sens_blng`, and `life_satis` are coded such that lower values = poorer perceived health/sense of belonging/life satisfaction.
+
+`perc_gen_health`, `perc_ment_health`, and `sens_blng` are coded such that higher values = worse perceived health/sense of belonging.
+
+`perc_stress` is coded so that higher values = more stress.
+
+In contrast, for `life_satis`, higher scores = higher life satisfaction.
 :::
 
-This project focuses on the factors that influence self-reports of recent e-cigarette use in a youth sample. We will explore whether certain variables change the predicted probability of e-cigarette use in the past month.
+This project focuses on the factors that are associated with self-reports of recent e-cigarette use in a youth sample. We will explore whether certain variables change the predicted probability of e-cigarette use in the past month.
 
 Since our dependent variable is binary, we will implement a logistic regression.
 
 ## Logistic regression with `statsmodels`
+
+It is important to assess whether the predictors that we'll include in our model are highly related to each other. The logistic model could end up having difficulty estimating the effect of certain predictors if they are closely related. 
+
+We'll assess this assumption using the variance inflation factor of each predictor. Typically, a VIF of 1 means there is no multi-collinearity. 5-10 is cause for some concern, and > 10 means the estimates from those predictors are unstable.
+
+### Check VIF:
+
+```{python}
+
+x = data[[
+    'perc_gen_health',
+    'perc_ment_health', 
+    'perc_stress',
+    'sens_blng',
+    'life_satis',
+    'mood_disdr',
+    'anx_disdr'
+]]
+
+corr_vars = ['life_satis', 'sens_blng', 'perc_gen_health', 'perc_ment_health', 'perc_stress', 'mood_disdr', 'anx_disdr']
+
+cnst = sm.add_constant(x[corr_vars])
+
+vif_data = pd.DataFrame()
+vif_data['feature'] = corr_vars
+vif_data['VIF'] = [variance_inflation_factor(cnst.values, i) for i in range(1, cnst.shape[1])]
+print(vif_data.sort_values('VIF', ascending=False))
+```
+
+::: {.callout-note}
+## Correcting an earlier mistake
+In v1.0, I forgot to add the `sm.add_constant()` line, rendering my VIF values highly inflated. Here, we see that the variables are only modestly related.
+:::
+
+With this assumption tested, we can now move on to the main part of the analysis.
 
 ### Fit the model
 
@@ -181,15 +225,15 @@ Since our dependent variable is binary, we will implement a logistic regression.
 mod = smf.logit('vaping ~ perc_gen_health + perc_ment_health + perc_stress + sens_blng + life_satis + mood_disdr + anx_disdr', data=data).fit()
 ```
 
-We can then generate a summary of the model to see the influence of our predictors
+We can then generate a summary of the model:
 
 ```{python}
 print(mod.summary())
 ```
 
-When looking at the summary, we see that sense of community belonging meaningfully changes the likelihood of recent youth e-cigarette use. Youth life satisfaction also changes vaping status, although this effect was marignally significant.
+When looking at the summary, we see that a weaker sense of community belonging is associated with a lower likelihood of recent youth e-cigarette use. Youth life satisfaction is also associated with vaping status, although this effect was marginally significant.
 
-Let us explore the marginal effects from the model to understand how much a single unit increase in a given predictor alters the likelihood of e-cigarette use.
+Let us explore the average marginal effects from the model to understand how much a single unit increase in a given predictor relates to the likelihood of e-cigarette use.
 
 ### Marginal effects
 
@@ -198,7 +242,7 @@ margeff = mod.get_margeff()
 print(margeff.summary())
 ```
 
-In this table, we observe that, for every one unit increase in a youth's sense of belonging, their likelihood to report e-cigarette use in the past month lowers by approximately 10.3%. Further, we see a marginal effect of life satisfaction: this tells us that recent e-cigarette use is lowered by about 3.1% for every single-unit increase.
+In this table, we observe that, for every one unit increase in a youth's sense of belonging (as it gets *worse*), there is an associated 10.3 percentage point decrease in their likelihood to report e-cigarette use in the past month. Further, we see a marginal effect of life satisfaction. E-cigarette use is associated with a 3.1 percentage point decrease for every single-unit increase.
 
 We will visualize these marginal effects next.
 
@@ -207,11 +251,11 @@ We will visualize these marginal effects next.
 ```{python}
 margeff_df = pd.DataFrame({
     'variable': mod.model.exog_names[1:],
-    'dydx': margeff.margeff,
+    'dydx': margeff.margeff * 100,
     'std_err': margeff.margeff_se,
     'p_value': margeff.pvalues,
-    'ci_low': margeff.conf_int()[:, 0],
-    'ci_high': margeff.conf_int()[:, 1]
+    'ci_low': margeff.conf_int()[:, 0] * 100,
+    'ci_high': margeff.conf_int()[:, 1] * 100
 })
 ```
 
@@ -252,53 +296,37 @@ plt.show()
 
 *Note:* Error bars represent 95% confidence intervals
 
-Beyond life satisfaction and community belonging, all other predictors did not meaningfully change the probability of youth vaping. Thus, community belonging and overall satisfaction may be two variables that e-cigarette interventions could target to reduce the likelihood of youth uptake.
+### Interim conclusion
 
-However, it is important to consider some reasons why these other predictors do not meaningfullt change the probability of vaping status. Beyond merely a weak signal, one possibility could be that the logistic model has difficulty estimating the effect of certain predictors since they are closely related. This concern re: collinearity of the predictors could be checked by examining the variance inflation factor of each predictor.
+The logistic regression tells us that some predictors are associated with a decrease in the likelihood of youth e-cigarette use in the last month. We used a linear model here, but what happens if we implement a more flexible approach? In this next step, we'll use a random forest machine learning algorithm to assess whether the psychological variables we've explored can classify current e-cigarette users from past users. Does this flexible model find a signal where the linear model does not?
 
-Typically, a VIF of 1 means there is no multi-collinearity. 5-10 is cause for some concern, and > 10 means the estimates from those predictors are unstable.
+## Classification: Random forest versus logistic regression
 
-### Check VIF:
+::: {.callout-note}
+## Correcting an earlier mistake
+In v1.0, I used a simple train/test split method to train the model. To give more stable estimates for this sample size, each model is cross-validated at ten folds.
+:::
 
-```{python}
-from statsmodels.stats.outliers_influence import variance_inflation_factor
-
-x = data[[
-    'perc_gen_health',
-    'perc_ment_health', 
-    'perc_stress',
-    'sens_blng',
-    'life_satis',
-    'mood_disdr', 
-    'anx_disdr'
-]]
-
-corr_vars = ['life_satis', 'sens_blng', 'perc_gen_health', 'perc_ment_health', 'perc_stress', 'mood_disdr', 'anx_disdr']
-
-vif_data = pd.DataFrame()
-vif_data['feature'] = corr_vars
-vif_data['VIF'] = [variance_inflation_factor(x[corr_vars].values, i) for i in range(len(corr_vars))]
-print(vif_data.sort_values('VIF', ascending=False))
-```
-
-We can see that many of these variables have a very high VIF, making the estimation of their effect on youth vaping probability hard to rely on.
-
-To account for this, we will proceed with a method that does not hold the same assumptions that a logistic regression does. We will use a random forest ML classifier.
-
-## Random forest machine learning classifier with `sklearn`
-
-First, we will state what our predictor and outcome variables are, then use the train, test, split method.
+First, we will state what our predictor and outcome variables are.
 
 ```{python}
-# We will use x from above for the predictors
-
 y = data['vaping']
 
-x_train, x_test, y_train, y_test = train_test_split(
-    x, y, test_size=.25, random_state=29, stratify=y)
+models = {
+"Logistic regression": make_pipeline(
+    StandardScaler(),
+    LogisticRegression(max_iter=1000)),
+"Random forest": RandomForestClassifier(n_estimators=500, min_samples_leaf=10, random_state=50)}
 ```
 
+::: {.callout-note}
+## Note on the logistic regression
+This logistic model uses the same predictors as our earlier model. Note, though, that the current model is fit with `sklearn`, rather than `statsmodels`. The difference is that the earlier model was used to describe associations while the latter is used for classification.
+:::
+
 Let's next look into class balance -- what proportion of the sample reports vaping in the past month?
+
+If these classes are unbalanced, we might want to proceed with a stratified K-fold approach, rather than a standard K-fold cross-validation.
 
 ```{python}
 # First, let us get the counts for the number of 1s and 0s
@@ -315,59 +343,49 @@ col_concat = pd.concat([col_count,col_prop], axis=1, keys=['count','proportion']
 print(col_concat)
 ```
 
-We find that the classes are quite balanced. This is useful because, if we wanted to use this model to classify members of the youth sample as being users/non-users of e-cigarettes, we would be confident that the model could provide a reliable estimate. When there are lopsided classes, this can lead to an unreliable accuracy value.
+We find that the classes are quite balanced. We'll go forward with the typical K-fold method.
 
-Next, we will move on to training the model.
-
-### Train the model:
+### Cross-validate each model:
 
 ```{python}
-classifier = RandomForestClassifier(n_estimators=100, random_state=29)
 
-classifier.fit(x_train, y_train)
+k_fold = KFold(n_splits=10, shuffle=True, random_state=51)
+
+with np.errstate(invalid='ignore', divide='ignore', over='ignore'):
+    auc = {
+        name: cross_val_score(model, x, y, cv=k_fold, scoring='roc_auc')
+            for name, model in models.items()
+    }
+
+auc_df = pd.DataFrame(auc)
+print(auc_df.round(3))
+print(auc_df.agg(['mean', 'std']).round(3))
 ```
 
-### Model diagnostics
-
-Now that we have fit the model, we should explore how well it performs.
-
-We will plot an AUC-ROC curve to examine how well the model performs, versus chance.
+::: {.callout-note}
+Note that I've silenced an erroneous `numpy` warning that appears on Apple Silicon Macs. I've verified that the data do not include missing or infinite values, or `NaNs`:
 
 ```{python}
-y_prob = classifier.predict_proba(x_test)[:,1]
-
-fpr, tpr, thresholds = roc_curve(y_test,y_prob)
-
-roc_auc = roc_auc_score(y_test,y_prob)
-
-plt.figure()
-plt.plot(fpr, tpr, label=f"ROC Curve (AUC = {roc_auc:.2f})")
-plt.plot([0,1], [0,1], linestyle="--")
-plt.xlabel("False Positive Rate")
-plt.ylabel("True Positive Rate")
-plt.title("ROC Curve")
-plt.legend()
-plt.show()
+print(x.isna().sum().sum(), np.isfinite(x.to_numpy(dtype=float)).all())
 ```
 
-We see that the model is actually doing a very poor job of classifying youth as users or non-users of e-cigarettes. When we examine how much a given predictor contributes to the model's classifications, we should interpret these importances with caution because they are likely unstable. 
+See [numpy#28687](https://github.com/numpy/numpy/issues/28687) and [scikit-learn#31395](https://github.com/scikit-learn/scikit-learn/issues/31395) for more info.
+:::
 
-Now we will get to see how much each of our predictors influenced the classification process. That is, how much uncertainty did a given predictor (henceforth 'feature') remove when the model was making classifications? This gives us an estimate of the importance of a feature in the model, but it does not tell us how much each feature influences real-world outcomes like e-cigarette use, for example.
+### Results
 
-### Identify feature importances:
+We observe that the mean AUC scores between the logistic regression and random forest algorithm are similar. For both models, the average ability to discriminate between current and past e-cigarette users is modestly above chance (random guessing).
 
-```{python}
-feat_import = pd.Series(classifier.feature_importances_, index=x.columns)
+Our earlier question, regarding whether a different pattern might emerge when we adopt a non-linear approach has been answered. It appears that the psychological variables we are interested in do not remove much uncertainty from these models when they make classifications.
 
-feat_import_sorted = feat_import.sort_values(ascending=False)
+### Conclusions
 
-print(feat_import_sorted)
-```
+Overall, we've asked two distinct questions in this analysis. First, how are psychological predictors (e.g., perceived mental health) associated with changes in the likelihood of e-cigarette use in the past month, among Canadian youth? We saw that a weaker youth sense of belonging was associated with decreases in e-cigarette use: as belonging gets weaker, the likelihood to vape decreases. Further, we observed a marginal association: higher life satisfaction scores were related to a slightly lower likelihood of recent e-cigarette use.
 
-Crucially, these feature importances are likely not reliable estimates of the usefulness of each feature, because the model lacks predictive power in the first place. Instead, the logistic and random forest models suggest that the predictors do not meaningfully change the predicted probability that a young person has used an e-cigarette lately.
+Our second question had to do with classifying members of our youth sample as current or past e-cigarette users. We found that both a logistic regression (mean AUC = `{python} f"{auc_df['Logistic regression'].mean():.2f}"`) and a random forest machine learning algorithm (mean AUC = `{python} f"{auc_df['Random forest'].mean():.2f}"`) did modestly better than chance when discriminating between these two classes. The flexible model found little additional signal. Instead, these variables likely hold little predictive value when it comes to determining recent e-cigarette use.
 
-The non-significant results in the logistic regression may not be driven wholly by high VIF values, but rather a lack of signal in the data. 
+### Limitations
 
-Importantly, the effect of community belonging should not be interpreted as unimportant given weak predictive power of the other predictors. Instead, this variable seems to exert a meaningful influence on reducing youth vaping and is one of the stronger signals in a relatively noisy sample.
+Importantly, these data are cross-sectional. Therefore, the significant predictors in our first logistic regression are merely *associated with* decreases in the likelihood of recent e-cigarette use. We cannot make causal inferences about these data. Additionally, I did not control for age or sex here, nor did I use survey weights. This latter point means that these results describe the current sample rather than all Canadian youth.
 
-For a write-up of these data, with conclusions and next steps, see `brief.pdf`
+For a write-up of these data, see `brief.pdf`

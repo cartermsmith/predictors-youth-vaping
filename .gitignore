@@ -12,4 +12,7 @@ data/
 cchs-queried.csv
 
 .DS_Store
-.ipynb_checkpoints/
+.ipynb_checkpoints/venv/
+.DS_Store
+.Rhistory
+.quarto/
