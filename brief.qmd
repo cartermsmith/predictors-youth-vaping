@@ -1,7 +1,7 @@
 ---
 title: Predictors of Canadian Youth Vaping
 author: Carter M. Smith
-date: 2026-09-16
+date: 2026-11-21
 format:
   PrettyPDF-pdf:
     keep-tex: true
@@ -12,17 +12,19 @@ suppress-bibliography: true
 
 ## Summary
 
-- Youth's sense of belonging in their community was shown to meaningfully predict reductions in the likelihood of self-reported e-cigarette use.
+- A *weakened* sense of youth community belonging was associated with *reductions* in the likelihood of self-reported e-cigarette use in the last month.
 
-- To a lesser extent, general life satisfaction also reduced the likelihood that youth used e-cigarettes.
+- Higher life satisfaction was marginally associated with a lower likelihood of use in the past month.
 
-- Other variables like perceived mental health, perceived stress, and presence of an anxiety or mood disorder did not significantly change the predicted probability of e-cigarette use.
+- Other variables like perceived mental health, perceived stress, and presence of an anxiety or mood disorder did not significantly relate to changes in predicted probability of e-cigarette use.
 
-- Policy focused on reducing youth vaping may consider enhancing youth community engagement and targeting overall life satisfaction. Other factors not included here should also be explored. 
+- Two machine learning classifiers performed modestly above chance when discriminating between current and past e-cigarette users.
+
+- Additional measures beyond the psychological variables examined here appear necessary to assess how Canadian youth use e-cigarettes once they've tried them.
 
 ## Introduction
 
-Research has explored the factors associated with high vaping prevalence in Canada [@millerCanadaHasHighest2023]. Alcohol and cannabis use, or recent school absences correlate with daily e-cigarette use [@shiMachineLearningApproach2022]. How might data reflecting the psychological well-being of youth respondents influence their likelihood to vape? This project explores several variables that may change the probability that a young person has recently used an e-cigarette.
+Research has explored the factors associated with high vaping prevalence in Canada [@millerCanadaHasHighest2023]. Alcohol and cannabis use, or recent school absences correlate with daily e-cigarette use [@shiMachineLearningApproach2022]. How might data reflecting the psychological well-being of youth respondents relate to their likelihood to vape? This project explores several variables that may be associated with the probability of a young person recently using an e-cigarette after they've tried it once.
 
 ## Data Description
 
@@ -30,28 +32,34 @@ This project uses data from the [Canadian Community Health Survey: Public Use Mi
 
 ## Methodology
 
-Only data from youth respondents (aged 12–17) were analyzed. The binary outcome variable was whether a youth respondent had used an e-cigarette at least once over the past month. The two classes were reasonably balanced (55% non-users, 45% users). Several continuous and binary variables were investigated to explore their influence on the probability of the outcome. For a concise presentation of these predictor variables, refer to the left side of *Figure 1*.
+Only data from youth respondents (aged 12–17) were analyzed. The binary outcome variable was whether a youth respondent had used an e-cigarette at least once over the past month. Crucially, respondents must have tried an e-cigarette once in their life. Here, use in the last month makes a respondent a "current user" while no past-month use deems a respondent a "past user".
+
+The two classes were reasonably balanced (55% past, 45% current). Several continuous and binary variables were investigated to explore their association with the probability of the outcome. For a concise presentation of these predictor variables, refer to the left side of *Figure 1*.
 
 The youth sample was queried from the full microdata file using SQL, via the `duckdb` library. Subsequent cleaning, modelling, and visualization was done in Python. The complete analysis code can be viewed as an HTML file [here](https://github.com/cartermsmith/predictors-youth-vaping).
 
+A logistic regression (LR) (fit with `statsmodels`) was used to uncover associations. Subsequently, to explore whether associations were hidden by using a linear model, I implemented a random forest ML algorithm (RF) and LR (fit with `sklearn`). These latter models were used for classification.
+
 ## Findings
 
-To examine what influences youth vaping, a logistic regression was first implemented. This analysis revealed that each time a young person's self-reported sense of community belonging increases by one point, the likelihood that they have recently used an e-cigarette is reduced by 10.3 percentage points. Further, when general life satisfaction is increased by one unit, this likelihood decreases by 3.1 percentage points, although this finding was marginal (see *Figure 1*).
+An LR revealed a significant relation between sense of belonging and e-cigarette use. Each single-unit increase (getting *worse*) in self-reported sense of community belonging was associated with a 10.3 percentage point reduction in the likelihood of e-cigarette use. Further, when general life satisfaction increased by one unit (getting *better*), this likelihood decreased by 3.1 percentage points, although this finding was marginal (see *Figure 1*). None of the other predictors were significantly associated with the outcome.
 
-None of the other predictors meaningfully changed the outcome variable.
+![Figure 1: Average marginal effects on recent e-cigarette use probability. Error bars = 95% CIs.](plot.jpg)
 
-![](plot.jpg)
+Both classifiers performed modestly above chance when discriminating between current and past e-cigarette users (AUC ~.57-.60). These psychological predictors carry little information when predicting vaping status at the individual level.
 
 ## Conclusion
 
-The likelihood for youth to use e-cigarettes within the past month is reduced by 10.3 percentage points when their sense of belonging is heightened. Further, general life satisfaction seems to slightly reduce vaping likelihood, by 3.1 percentage points.
+There is an association between recent e-cigarette use and youth sense of belonging: as belonging gets worse, e-cigarette use also trends downwards. Neither machine learning approach learned much from the predictors, suggesting that these psychological variables are themselves not adequate to classify current users from past users.
 
-## Limitations
+## Limitations & Next Steps
 
-Only two predictors meaningfully altered the likelihood of e-cigarette use. One explanation was that the predictors were highly correlated, violating a key assumption of logistic regression. After examining the variance inflation factor of each predictor, many of the variables were closely correlated with each other. A random forest classifier, which does not make this assumption, allowed me to examine predictor importance.
+The current analysis is limited by the data being cross-sectional. These data are a snapshot in time, and because of this, cause and effect cannot be separated from one another. Thus, the effects observed above merely suggest that weaker belonging and lower e-cigarette use *co-occur* with each other.
 
-However, upon checking the diagnostics of the model, I found that this model did not learn much from the data. The model was only doing slightly better than random guessing when making predictions (AUC = 0.52). This means that any conclusions drawn from this model's predictor rankings should be interpreted cautiously.
+This analysis did not use survey weights, meaning that the conclusions made here apply to the current sample rather than Canadian youth writ-large. Sex and age were also not controlled for.
 
-Therefore, I concluded that the lacking effects in the logistic model were driven by few signals in a noisy dataset, rather than a statistical assumption being violated. 
+Speculatively, it's interesting that *weakened* youth sense of belonging is associated with reduced e-cigarette use. This could suggest that e-cigarette use is more common in social settings, perhaps done with friends. The data cannot speak to this directly, but future work exploring this counterintuitive direction might elucidate how peer influence, for instance, shapes vape use.
 
-The significant predictors in the logistic model remain as strong signals that may guide programs that aim to reduce youth vaping by targeting certain measures of well-being like community belonging or life satisfaction.
+**Revision note: November 2026**
+
+An earlier version of this brief included errors that have since been corrected in this version. The direction of the sense-of-belonging measure was reported incorrectly. Collinearity conclusions were incorrect due to an oversight in the Python code. The cross-sectional structure of the data was not adequately acknowledged, with causal language included.
