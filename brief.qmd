@@ -44,7 +44,7 @@ A logistic regression (LR) (fit with `statsmodels`) was used to uncover associat
 
 An LR revealed a significant relation between sense of belonging and e-cigarette use. Each single-unit increase (getting *worse*) in self-reported sense of community belonging was associated with a 10.3 percentage point reduction in the likelihood of e-cigarette use. Further, when general life satisfaction increased by one unit (getting *better*), this likelihood decreased by 3.1 percentage points, although this finding was marginal (see *Figure 1*). None of the other predictors were significantly associated with the outcome.
 
-![Figure 1: Average marginal effects on recent e-cigarette use probability. Error bars = 95% CIs.](plot.jpg)
+![Avg. marginal effects on recent vaping probability. Error bars = 95% CIs.](plot.jpg)
 
 Both classifiers performed modestly above chance when discriminating between current and past e-cigarette users (AUC ~.57-.60). These psychological predictors carry little information when predicting vaping status at the individual level.
 

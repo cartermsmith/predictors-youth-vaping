@@ -5,17 +5,21 @@
 
 Author: Carter M. Smith
 
-Published: 2026-09-18
+Published: 2026-09-18; [`Version 1`](https://github.com/cartermsmith/predictors-youth-vaping/tree/v1.0).
 
-An analysis of psychological predictors that influence the likelihood that a young person (aged 12-17) in Canada has used an e-cigarette over the past month. Data comes from the [2022 Canadian Community Health Survey Public Use Microdata File (CCHS-PUMF)](https://www150.statcan.gc.ca/n1/en/catalogue/82M0013X).
+Revised: 2026-11-21
+
+An analysis of psychological predictors that are associated with the likelihood that a young person in Canada (aged 12-17), who has tried vaping, has used an e-cigarette over the past month. Data comes from the [2022 Canadian Community Health Survey Public Use Microdata File (CCHS-PUMF)](https://www150.statcan.gc.ca/n1/en/catalogue/82M0013X).
 
 ## Summary
 
-- For every one-unit increase in a young respondent's sense of belonging in the community, the likelihood that they have recently vaped decreases by 10.3 percentage points.
+- Counterintuitively, a *weakened* sense of youth community belonging was associated with *reductions* in the likelihood of self-reported e-cigarette use in the last month.
 
-- As youth life satisfaction increases by a single unit, the predicted probability that they have recently vaped is reduced by 3.1 percentage points.
+- Higher life satisfaction ratings were marginally related to decreases in past-month use.
 
-- Policy focused on reducing youth vaping may consider enhancing youth community engagement and targeting overall life satisfaction. Other factors not included here should also be explored. 
+- Two machine learning classifiers performed modestly above chance when discriminating between current and past e-cigarette users (AUC ~.57-.60).
+
+- Additional measures beyond the psychological variables examined here appear necessary to assess how Canadian youth use e-cigarettes once they've tried them.
 
 ## Read the brief
 
@@ -56,19 +60,23 @@ quarto render brief.qmd
 ## Methodology
 
 - Data wrangling: SQL, via DuckDB. Queried/filtered the youth sample. Further cleaning done with `pandas`.
-- Modelling: Logistic regression (`statsmodels`); random forest (RF) machine learning classifier (`sklearn`) as a robustness check.
-- Diagnostics: Multi-collinearity checked with VIF, AUC-ROC for RF performance.
+- Modelling: Logistic regression (`statsmodels`); random forest (RF) and logistic regression machine learning classifiers (`sklearn`) with 10-fold cross-validation. AUC was used for model performance.
+- Diagnostics: Multi-collinearity checked with VIF.
 
 ## Limitations
 
-- For a description of what an attempted robustness check via a machine learning algorithm revealed about the data, see the *Limitations* section of `brief.qmd` / `brief.pdf`.
+- These data are cross-sectional. No causal conclusions can be made about the observed associations.
+
+- Survey weights were not used; conclusions are limited to the sample here, rather than Canadian youth writ-large.
+
+- For additional limitations and speculative next steps, see the *Limitations & Next Steps* section of `brief.qmd` / `brief.pdf`.
 
 ## Acknowledgements
 
-- The PrettyPDFs Quarto extension from Nicola Rennie was used when creating the brief. Check it out using the citation below!
+- The PrettyPDF Quarto extension from Nicola Rennie was used when creating the brief. Check it out using the citation below!
 
 *Rennie, Nicola. 2023. “Making Pretty PDFs with Quarto.” February 17. https://nrennie.rbind.io/blog/pdf-quarto/making-pretty-pdf-quarto/.*
 
 - Data source note:
 
-*Source: Statistics Canada, 2022 Canadian Community Health Survey Public Use Microdata File, 2026-09-18. Reproduced and distributed on an "as is" basis with the permission of Statistics Canada.*
+*Source: Statistics Canada, 2022 Canadian Community Health Survey Public Use Microdata File, 2022. Reproduced and distributed on an "as is" basis with the permission of Statistics Canada.*
